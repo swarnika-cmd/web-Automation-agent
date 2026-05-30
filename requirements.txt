@@ -1,0 +1,8 @@
+playwright
+httpx
+rich
+python-dotenv
+Pillow
+fastapi
+uvicorn[standard]
+websockets
