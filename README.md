@@ -165,6 +165,4 @@ AutoCli-Agent/
 
 ---
 
-## 📄 License
 
-This project was created for educational purposes (Assignment 04 — Website Automation Agent).
