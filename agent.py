@@ -22,7 +22,7 @@ import time
 import warnings
 import atexit
 
-from typing import Any
+from typing import Any, Optional
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -248,6 +248,74 @@ def call_llm(backend: GroqBackend, messages: list) -> str:
     raise RuntimeError("LLM call failed: all retries exhausted")
 
 
+# ─── LLM Backend (Gemini Vision) ─────────────────────────────
+
+class GeminiBackend:
+    """
+    Gemini API backend for vision-based calls.
+    """
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        self.model = genai.GenerativeModel("gemini-1.5-flash")
+        self.name = "Gemini (gemini-1.5-flash)"
+
+    def chat_with_vision(self, messages: list, screenshot_path: str) -> str:
+        """
+        Send conversation history and the latest screenshot to Gemini.
+        """
+        from PIL import Image
+        parts = []
+        
+        # Add system instructions
+        parts.append(f"SYSTEM INSTRUCTIONS:\n{SYSTEM_PROMPT}\n\n")
+        
+        # Add conversation history
+        parts.append("CONVERSATION HISTORY:\n")
+        for msg in messages:
+            role = msg["role"]
+            content = msg.get("content", "")
+            parts.append(f"{role.upper()}: {content}\n")
+            
+        # Add the image part
+        img_path = Path(__file__).parent / screenshot_path
+        if img_path.exists():
+            try:
+                img = Image.open(img_path)
+                parts.append(img)
+                parts.append("\n[Above is the live screenshot of the current page view. Use it to confirm page state, coordinates, and visually verify your actions before planning the next tool call.]")
+            except Exception as e:
+                parts.append(f"\n[Warning: Failed to load screenshot file: {e}]")
+        else:
+            parts.append(f"\n[Warning: Screenshot file not found at {screenshot_path}]")
+            
+        parts.append("\n\nBased on the system instructions, conversation history, and current screenshot above, what is your next action? Output a short thinking line followed by exactly one JSON tool call.")
+        
+        response = self.model.generate_content(parts)
+        return response.text
+
+
+def call_gemini(backend: GeminiBackend, messages: list, screenshot_path: str) -> str:
+    """Call the Gemini vision backend with retries."""
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            return backend.chat_with_vision(messages, screenshot_path)
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "rate" in error_str.lower() or "quota" in error_str.lower():
+                wait_secs = 15
+                console.print(f"  [yellow]⏳ Gemini rate limited. Waiting {wait_secs}s... (attempt {attempt + 1}/{max_retries})[/yellow]")
+                time.sleep(wait_secs)
+                continue
+            if attempt == max_retries - 1:
+                raise RuntimeError(f"Gemini vision call failed after {max_retries} attempts: {error_str[:200]}")
+            console.print(f"  [yellow]⚠ Gemini error: {error_str[:100]}. Retrying...[/yellow]")
+            time.sleep(2)
+    raise RuntimeError("Gemini vision call failed: all retries exhausted")
+
+
 # ─── Conversation History Management ─────────────────────────
 
 MAX_HISTORY_CHARS = 80_000  # Max total chars before pruning kicks in
@@ -292,7 +360,7 @@ def trim_history(chat_history: list) -> list:
 
 # ─── Agent Loop ──────────────────────────────────────────────
 
-def run_agent_loop(user_message: str, chat_history: list, backend: GroqBackend) -> tuple[list, Any]:
+def run_agent_loop(user_message: str, chat_history: list, backend: GroqBackend, gemini_backend: Optional[Any] = None) -> tuple[list, Any]:
     """
     Run the ReAct agent loop for a single user instruction.
 
@@ -310,6 +378,7 @@ def run_agent_loop(user_message: str, chat_history: list, backend: GroqBackend) 
         user_message: The user's instruction.
         chat_history: The ongoing conversation history (mutated in place).
         backend: The LLM backend to use.
+        gemini_backend: Optional Gemini vision backend to run when screenshots are present.
 
     Returns:
         A tuple of (updated chat_history, EventLog).
@@ -317,6 +386,7 @@ def run_agent_loop(user_message: str, chat_history: list, backend: GroqBackend) 
     from event_log import EventLog
     from report_generator import generate_report
     import dashboard
+    from typing import Optional
 
     MAX_STEPS = 20
     MAX_RETRIES = 3
@@ -351,12 +421,24 @@ def run_agent_loop(user_message: str, chat_history: list, backend: GroqBackend) 
         event_log.add(step=step, event_type="thinking", message="Analyzing page state and planning next action...")
         dashboard.broadcast_event({"type": "event", "event": event_log.events[-1].to_dict()})
 
-        # ─── Call the LLM ─────────────────────────────────
+        # ─── Call the LLM (vision-enabled if screenshot exists and gemini is active) ───
         try:
             # Prune history before sending to prevent 413 errors
             trimmed = trim_history(chat_history)
+            
+            # Find if there is a recent screenshot in the event log
+            latest_screenshot = None
+            for event in reversed(event_log.events):
+                if event.screenshot_path:
+                    latest_screenshot = event.screenshot_path
+                    break
+            
             with console.status("[bold blue]Agent is thinking...[/bold blue]", spinner="dots"):
-                response_text = call_llm(backend, trimmed)
+                if latest_screenshot and gemini_backend:
+                    console.print(f"  [dim]Using Gemini Vision for screenshot analysis...[/dim]")
+                    response_text = call_gemini(gemini_backend, trimmed, latest_screenshot)
+                else:
+                    response_text = call_llm(backend, trimmed)
         except RuntimeError as e:
             console.print(Panel(
                 f"[bold red]{e}[/bold red]\n\n"
@@ -601,6 +683,15 @@ def main():
     backend = create_backend()
     chat_history = []
 
+    # Initialize optional Gemini backend for vision tasks
+    gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    gemini_backend = None
+    if gemini_key and not gemini_key.startswith("your_"):
+        try:
+            gemini_backend = GeminiBackend(gemini_key)
+        except Exception as e:
+            console.print(f"  [yellow]⚠️ Failed to initialize Gemini backend: {e}[/yellow]")
+
     # Start live dashboard background thread
     from dashboard import start_dashboard
     start_dashboard()
@@ -608,6 +699,10 @@ def main():
     # Welcome screen
     console.print(WELCOME_BANNER)
     console.print(f"  [dim]LLM Backend: {backend.name}[/dim]")
+    if gemini_backend:
+        console.print(f"  [dim]Vision Backend: {gemini_backend.name}[/dim]")
+    else:
+        console.print(f"  [dim]Vision Backend: Disabled (No GEMINI_API_KEY found)[/dim]")
     console.print(f"  [dim]Screenshots: ./screenshots/[/dim]")
     console.print(f"  [bold green]🖥️  Live Dashboard: http://localhost:8765[/bold green]")
     console.print()
@@ -649,7 +744,7 @@ def main():
             console.print(Rule(style="dim"))
 
         # ─── Run the agent loop ───────────────────────────
-        chat_history, event_log = run_agent_loop(user_input, chat_history, backend)
+        chat_history, event_log = run_agent_loop(user_input, chat_history, backend, gemini_backend)
 
 
 if __name__ == "__main__":

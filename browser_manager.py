@@ -99,9 +99,9 @@ class BrowserManager:
         Capture a screenshot of the current page.
 
         The screenshot is compressed to reduce file size:
-        - Resized to 1024x768 (from 1280x720 viewport)
-        - Saved as JPEG at 60% quality
-        This brings ~2MB PNGs down to ~80-120KB, preventing
+        - Resized to 800x600 (from 1280x720 viewport)
+        - Saved as JPEG at 25% quality
+        This brings ~2MB PNGs down to ~20-30KB, preventing
         payload size issues when the conversation grows large.
 
         Args:
@@ -110,8 +110,8 @@ class BrowserManager:
         Returns:
             The file path of the saved screenshot, or an error message.
         """
-        if not self._page:
-            return "❌ No browser page available. Open the browser first."
+        if not self._page or self._page.is_closed():
+            return "❌ No browser page available or it has been closed."
 
         self._screenshot_counter += 1
         # Sanitize label for filename
@@ -123,13 +123,13 @@ class BrowserManager:
             # Capture as raw PNG bytes in memory
             raw_bytes = self._page.screenshot(full_page=False)
 
-            # Resize + compress with Pillow → JPEG 60% quality
+            # Resize + compress with Pillow → JPEG 25% quality
             img = Image.open(io.BytesIO(raw_bytes))
-            img = img.resize((1024, 768), Image.LANCZOS)
+            img = img.resize((800, 600), Image.LANCZOS)
             img = img.convert("RGB")  # JPEG doesn't support alpha
             
             buffer = io.BytesIO()
-            img.save(buffer, format="JPEG", quality=60, optimize=True)
+            img.save(buffer, format="JPEG", quality=25, optimize=True)
             self._latest_screenshot_bytes = buffer.getvalue()
             
             # Save bytes to file
@@ -138,7 +138,7 @@ class BrowserManager:
             size_kb = filepath.stat().st_size / 1024
             return (
                 f"✅ Screenshot saved: screenshots/{filename} ({size_kb:.1f} KB)\n"
-                f"   Resolution: 1024x768 JPEG | Page title: {self._page.title()}"
+                f"   Resolution: 800x600 JPEG | Page title: {self._page.title()}"
             )
         except Exception as e:
             return f"❌ Screenshot failed: {type(e).__name__}: {e}"
@@ -155,10 +155,10 @@ class BrowserManager:
             try:
                 raw_bytes = self._page.screenshot(full_page=False)
                 img = Image.open(io.BytesIO(raw_bytes))
-                img = img.resize((1024, 768), Image.LANCZOS)
+                img = img.resize((800, 600), Image.LANCZOS)
                 img = img.convert("RGB")
                 buffer = io.BytesIO()
-                img.save(buffer, format="JPEG", quality=60, optimize=True)
+                img.save(buffer, format="JPEG", quality=25, optimize=True)
                 self._latest_screenshot_bytes = buffer.getvalue()
                 return self._latest_screenshot_bytes
             except Exception:

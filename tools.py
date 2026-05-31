@@ -42,8 +42,8 @@ def navigate_to_url(url: str) -> str:
         url: The URL to navigate to (e.g., "https://example.com")
     """
     page = browser_manager.get_page()
-    if not page:
-        return "❌ Browser is not open. Call open_browser first."
+    if not page or page.is_closed():
+        return "❌ Browser is not open or page was closed. Call open_browser first."
 
     # Normalize URL
     if not url.startswith(("http://", "https://")):
@@ -80,8 +80,8 @@ def take_screenshot(label: str = "screenshot") -> str:
         label: A descriptive label for the screenshot filename.
     """
     page = browser_manager.get_page()
-    if not page:
-        return "❌ Browser is not open. Call open_browser first."
+    if not page or page.is_closed():
+        return "❌ Browser is not open or page was closed. Call open_browser first."
 
     result = browser_manager.take_screenshot(label=label)
 
@@ -102,8 +102,8 @@ def click_on_screen(x: int, y: int) -> str:
         y: Vertical pixel coordinate (from top edge)
     """
     page = browser_manager.get_page()
-    if not page:
-        return "❌ Browser is not open. Call open_browser first."
+    if not page or page.is_closed():
+        return "❌ Browser is not open or page was closed. Call open_browser first."
 
     try:
         # Ensure coordinates are integers
@@ -170,8 +170,8 @@ def send_keys(text: str) -> str:
         text: The text string to type.
     """
     page = browser_manager.get_page()
-    if not page:
-        return "❌ Browser is not open. Call open_browser first."
+    if not page or page.is_closed():
+        return "❌ Browser is not open or page was closed. Call open_browser first."
 
     try:
         # Clear any existing text in the focused field
@@ -209,8 +209,8 @@ def scroll(direction: str = "down", amount: int = 300) -> str:
         amount: Pixels to scroll (default: 300)
     """
     page = browser_manager.get_page()
-    if not page:
-        return "❌ Browser is not open. Call open_browser first."
+    if not page or page.is_closed():
+        return "❌ Browser is not open or page was closed. Call open_browser first."
 
     try:
         amount = int(amount)
@@ -245,8 +245,8 @@ def double_click(x: int, y: int) -> str:
         y: Vertical pixel coordinate
     """
     page = browser_manager.get_page()
-    if not page:
-        return "❌ Browser is not open. Call open_browser first."
+    if not page or page.is_closed():
+        return "❌ Browser is not open or page was closed. Call open_browser first."
 
     try:
         x, y = int(x), int(y)
