@@ -1,16 +1,27 @@
 # 🤖 AutoCli — AI-Powered Browser Automation Agent
 
-An intelligent browser automation agent that navigates web pages, interacts with elements, and fills forms autonomously. Built with **Python**, **Playwright**, and **Groq (Llama 3.3 70B)**.
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Render-3b82f6?style=for-the-badge&logo=render&logoColor=white)](https://autocliagent.onrender.com)
+[![Python Version](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Playwright](https://img.shields.io/badge/Playwright-Chromium-2E8B57?style=for-the-badge&logo=playwright&logoColor=white)](https://playwright.dev/)
 
-> **Assignment 04** — Website Automation Agent  
-> A mini browser-use implementation demonstrating AI-driven browser control.
+An intelligent browser automation agent that navigates web pages, interacts with elements, and fills forms autonomously. Built with **Python**, **Playwright**, **FastAPI WebSockets**, and **Groq (Llama 3.3 70B)**.
+
+> 🌐 **Live Web App:** [https://autocliagent.onrender.com](https://autocliagent.onrender.com)  
+> 💡 **Assignment 04** — Website Automation Agent demonstrating AI-driven browser control.
+
+### 🖥️ Live Control Panel & Action Timeline
+
+Below is a preview of the **AutoCli Live Control Panel** dashboard. Recruiters can enter any natural language browser automation task, hit **Run Task**, and watch the AI agent think, execute browser tools, and stream screenshots live via WebSockets.
+
+![AutoCli Dashboard Live Control Panel Preview](static/dashboard_mockup.png)
 
 ---
 
 ## ✨ Features
 
 - **AI-Driven Decision Making** — Uses Llama 3.3 70B via Groq for intelligent page understanding and action planning
-- **Real Browser Automation** — Controls a headed Chromium browser via Playwright (visible during demos)
+- **Live Web Dashboard** — Control and observe the agent dynamically from a WebSocket-powered Web Control Panel
+- **Real Browser Automation** — Controls Chromium via Playwright (runs headlessly in production on Render, headed locally for debugging)
 - **DOM-Based Element Detection** — Extracts interactive elements with coordinates, labels, and state from the live page
 - **ReAct Agent Loop** — Think → Act → Observe cycle for multi-step task completion
 - **7 Modular Tools** — `take_screenshot`, `open_browser`, `navigate_to_url`, `click_on_screen`, `send_keys`, `scroll`, `double_click`
