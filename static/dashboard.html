@@ -313,6 +313,71 @@
             color: var(--text-muted);
             font-size: 0.75rem;
         }
+
+        /* Glassmorphism Control Form */
+        .control-form-section {
+            flex-grow: 1;
+            margin: 0 32px;
+            max-width: 500px;
+        }
+
+        .control-form-section form {
+            display: flex;
+            gap: 10px;
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--card-border);
+            padding: 4px;
+            border-radius: 10px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .control-form-section form:focus-within {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .control-form-section input {
+            flex-grow: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-main);
+            padding: 8px 12px;
+            font-family: inherit;
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        .control-form-section input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .control-form-section button {
+            background: var(--accent-color);
+            color: #ffffff;
+            border: none;
+            padding: 8px 18px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-family: inherit;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+
+        .control-form-section button:hover {
+            opacity: 0.9;
+        }
+
+        .control-form-section button:active {
+            transform: scale(0.97);
+        }
+
+        .control-form-section button:disabled {
+            background: #374151;
+            color: var(--text-muted);
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
     </style>
 </head>
 <body>
@@ -321,6 +386,14 @@
             <h1><span>🤖</span> AutoCli Live Control Panel</h1>
             <div id="taskDesc" class="task-info">Waiting for a task...</div>
         </div>
+
+        <div class="control-form-section">
+            <form id="runForm" onsubmit="submitTask(event)">
+                <input type="text" id="taskInput" placeholder="Enter browser automation task (e.g. Navigate to google.com)..." required>
+                <button type="submit" id="runBtn">Run Task</button>
+            </form>
+        </div>
+
         <div class="header-stats">
             <div class="stat-item">
                 <div class="stat-lbl">Steps</div>
@@ -375,6 +448,64 @@
         const timeElapsedEl = document.getElementById('timeElapsed');
         const taskDescEl = document.getElementById('taskDesc');
         const statusBadge = document.getElementById('statusBadge');
+        
+        const taskInput = document.getElementById('taskInput');
+        const runBtn = document.getElementById('runBtn');
+
+        // Function to submit a new task to the server
+        async function submitTask(event) {
+            event.preventDefault();
+            const taskText = taskInput.value.trim();
+            if (!taskText) return;
+
+            runBtn.disabled = true;
+            taskInput.disabled = true;
+            runBtn.innerText = 'Starting...';
+
+            try {
+                const response = await fetch('/run', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ task: taskText })
+                });
+                const result = await response.json();
+                
+                if (result.status === 'error') {
+                    alert(result.message);
+                    runBtn.disabled = false;
+                    taskInput.disabled = false;
+                    runBtn.innerText = 'Run Task';
+                } else {
+                    // Task started successfully
+                    taskInput.value = '';
+                    feedContainer.innerHTML = `
+                        <div class="log-card thinking" style="border-left-color: var(--warning); background: rgba(245, 158, 11, 0.02);">
+                            <div class="log-card-header">
+                                <span class="step-lbl">Step 0</span>
+                                <span class="type-badge thinking">thinking</span>
+                            </div>
+                            <div class="log-card-body">
+                                Task received: "${taskText}". Initializing agent loop...
+                            </div>
+                        </div>
+                    `;
+                    stepCounter = 0;
+                    stepCountEl.innerText = 0;
+                    timeElapsedEl.innerText = '0s';
+                    taskDescEl.innerText = taskText;
+                    statusBadge.innerText = 'running';
+                    statusBadge.className = 'status-badge status-running';
+                }
+            } catch (err) {
+                console.error('Failed to submit task:', err);
+                alert('Connection error. Failed to send task to agent.');
+                runBtn.disabled = false;
+                taskInput.disabled = false;
+                runBtn.innerText = 'Run Task';
+            }
+        }
 
         // Periodically refresh the screenshot image
         function refreshScreenshot() {
@@ -406,14 +537,12 @@
             }, 1000);
         }
 
-        function stopTimer() {
-            if (timerInterval) clearInterval(timerInterval);
-        }
-
         // Add an event to the timeline feed
         function addEventToTimeline(event) {
-            if (emptyState) {
-                emptyState.remove();
+            // Remove empty state element if it exists
+            const eState = document.getElementById('emptyState');
+            if (eState) {
+                eState.remove();
             }
 
             const card = document.createElement('div');
@@ -490,6 +619,17 @@
                     if (data.events && data.events.length > 0) {
                         data.events.forEach(addEventToTimeline);
                     }
+
+                    // Disable inputs if task is running
+                    if (data.status === 'running') {
+                        runBtn.disabled = true;
+                        taskInput.disabled = true;
+                        runBtn.innerText = 'Running...';
+                    } else {
+                        runBtn.disabled = false;
+                        taskInput.disabled = false;
+                        runBtn.innerText = 'Run Task';
+                    }
                 } else if (data.type === 'event') {
                     addEventToTimeline(data.event);
                 } else if (data.type === 'status') {
@@ -497,6 +637,10 @@
                     statusBadge.className = `status-badge status-${data.status}`;
                     if (data.status !== 'running') {
                         stopTimer();
+                        // Re-enable controls when task is done
+                        runBtn.disabled = false;
+                        taskInput.disabled = false;
+                        runBtn.innerText = 'Run Task';
                     }
                 }
             };

@@ -11,9 +11,10 @@ import threading
 from pathlib import Path
 from typing import Optional, Set
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.responses import HTMLResponse, Response
 from PIL import Image
+import os
 
 from event_log import EventLog
 
@@ -118,11 +119,60 @@ async def _send_to_all(event_msg: dict) -> None:
             connected_websockets.discard(ws)
 
 
+# Task execution lock
+task_execution_running = False
+
+def execute_agent_task(task_desc: str):
+    global task_execution_running
+    try:
+        from agent import run_agent_loop, create_backend, GeminiBackend
+        
+        # Initialize backends
+        backend = create_backend()
+        gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
+        gemini_backend = None
+        if gemini_key and not gemini_key.startswith("your_"):
+            try:
+                gemini_backend = GeminiBackend(gemini_key)
+            except Exception as e:
+                print(f"Failed to initialize Gemini backend: {e}")
+                
+        chat_history = []
+        run_agent_loop(task_desc, chat_history, backend, gemini_backend)
+    except Exception as e:
+        print(f"Error running agent loop: {e}")
+        broadcast_event({"type": "status", "status": "failed"})
+    finally:
+        task_execution_running = False
+
+@app.post("/run")
+def trigger_task(payload: dict, background_tasks: BackgroundTasks):
+    global task_execution_running
+    from browser_manager import browser_manager
+    
+    if task_execution_running:
+        return {"status": "error", "message": "Another task is already running. Please wait."}
+        
+    task_desc = payload.get("task", "").strip()
+    if not task_desc:
+        return {"status": "error", "message": "Task description cannot be empty."}
+        
+    # Reset browser for a clean run
+    if browser_manager.is_open():
+        browser_manager.close()
+        
+    task_execution_running = True
+    background_tasks.add_task(execute_agent_task, task_desc)
+    return {"status": "success", "message": f"Task started: '{task_desc}'"}
+
+
 def run_server() -> None:
     """Run the FastAPI application with Uvicorn."""
     import uvicorn
-    # Use standard uvicorn, suppress verbose logger
-    uvicorn.run(app, host="127.0.0.1", port=8765, log_level="warning")
+    # Read port dynamically for Render (defaults to 8765)
+    port = int(os.environ.get("PORT", 8765))
+    # Bind to 0.0.0.0 to receive traffic in cloud env
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
 
 
 def start_dashboard() -> None:
@@ -133,3 +183,7 @@ def start_dashboard() -> None:
 
     _server_thread = threading.Thread(target=run_server, daemon=True)
     _server_thread.start()
+
+
+if __name__ == "__main__":
+    run_server()

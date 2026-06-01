@@ -51,17 +51,20 @@ class BrowserManager:
 
     def launch(self) -> str:
         """
-        Launch a Chromium browser in headed mode.
+        Launch a Chromium browser.
         Returns a status message.
         """
         if self._browser and self._browser.is_connected():
             return "⚠️ Browser is already open."
 
         try:
+            headless = os.environ.get("HEADLESS", "False").lower() == "true"
+            slow_mo_val = 0 if headless else 100
+            
             self._playwright = sync_playwright().start()
             self._browser = self._playwright.chromium.launch(
-                headless=False,       # Visible browser for demos
-                slow_mo=100,          # Slight delay so actions are visible
+                headless=headless,
+                slow_mo=slow_mo_val,
                 args=[
                     "--disable-blink-features=AutomationControlled",
                     "--no-first-run",
@@ -81,7 +84,8 @@ class BrowserManager:
             self._page = self._context.new_page()
             self._screenshot_counter = 0
             self._latest_screenshot_bytes = None
-            return "✅ Browser launched successfully (Chromium, headed mode, 1280x720, video enabled)."
+            mode_str = "headless" if headless else "headed"
+            return f"✅ Browser launched successfully (Chromium, {mode_str} mode, 1280x720, video enabled)."
 
         except Exception as e:
             return f"❌ Failed to launch browser: {type(e).__name__}: {e}"

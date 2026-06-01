@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: autocli-agent
+    env: docker
+    # We recommend starter plan (or higher) since launching Chromium requires reasonable memory (512MB - 1GB)
+    plan: starter
+    envVars:
+      - key: HEADLESS
+        value: "true"
+      - key: GROQ_API_KEY
+        sync: false
+        placeholder: "Enter your Groq API Key (gsk_...)"
+      - key: GEMINI_API_KEY
+        sync: false
+        placeholder: "Optional: Enter your Gemini API Key for vision-guided steps"
