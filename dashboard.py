@@ -121,9 +121,11 @@ async def _send_to_all(event_msg: dict) -> None:
 
 # Task execution lock
 task_execution_running = False
+should_stop_task = False
 
 def execute_agent_task(task_desc: str):
-    global task_execution_running
+    global task_execution_running, should_stop_task
+    should_stop_task = False
     try:
         from agent import run_agent_loop, create_backend, GeminiBackend
         
@@ -144,10 +146,11 @@ def execute_agent_task(task_desc: str):
         broadcast_event({"type": "status", "status": "failed"})
     finally:
         task_execution_running = False
+        should_stop_task = False
 
 @app.post("/run")
 def trigger_task(payload: dict, background_tasks: BackgroundTasks):
-    global task_execution_running
+    global task_execution_running, should_stop_task
     from browser_manager import browser_manager
     
     if task_execution_running:
@@ -162,8 +165,41 @@ def trigger_task(payload: dict, background_tasks: BackgroundTasks):
         browser_manager.close()
         
     task_execution_running = True
+    should_stop_task = False
     background_tasks.add_task(execute_agent_task, task_desc)
     return {"status": "success", "message": f"Task started: '{task_desc}'"}
+
+
+@app.post("/stop")
+def stop_task():
+    global should_stop_task
+    import time
+    from browser_manager import browser_manager
+    should_stop_task = True
+    
+    # Immediately close browser to interrupt any pending Playwright operations
+    if browser_manager.is_open():
+        try:
+            browser_manager.close()
+        except Exception:
+            pass
+            
+    # Broadcast early termination status to dashboard WebSockets
+    broadcast_event({
+        "type": "event",
+        "event": {
+            "step": 0,
+            "event_type": "error",
+            "message": "🛑 Task cancelled by user. Browser closed.",
+            "timestamp": time.time(),
+            "tool_name": None,
+            "tool_args": None,
+            "screenshot_path": None,
+            "duration_ms": 0
+        }
+    })
+    
+    return {"status": "success", "message": "Stop signal sent"}
 
 
 def run_server() -> None:

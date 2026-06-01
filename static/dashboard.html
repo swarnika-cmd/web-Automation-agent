@@ -455,6 +455,13 @@
         // Function to submit a new task to the server
         async function submitTask(event) {
             event.preventDefault();
+            
+            // If task is running, the button functions as a Stop button
+            if (statusBadge.innerText === 'running') {
+                await stopTask();
+                return;
+            }
+
             const taskText = taskInput.value.trim();
             if (!taskText) return;
 
@@ -497,6 +504,11 @@
                     taskDescEl.innerText = taskText;
                     statusBadge.innerText = 'running';
                     statusBadge.className = 'status-badge status-running';
+                    
+                    // Change button to active Stop button
+                    runBtn.disabled = false;
+                    runBtn.innerText = 'Stop';
+                    runBtn.style.backgroundColor = 'var(--failed)';
                 }
             } catch (err) {
                 console.error('Failed to submit task:', err);
@@ -504,6 +516,27 @@
                 runBtn.disabled = false;
                 taskInput.disabled = false;
                 runBtn.innerText = 'Run Task';
+            }
+        }
+
+        async function stopTask() {
+            runBtn.disabled = true;
+            runBtn.innerText = 'Stopping...';
+            try {
+                const response = await fetch('/stop', {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                if (result.status !== 'success') {
+                    alert(result.message || 'Error occurred while stopping.');
+                    runBtn.disabled = false;
+                    runBtn.innerText = 'Stop';
+                }
+            } catch (err) {
+                console.error('Failed to stop task:', err);
+                alert('Connection error. Failed to cancel task.');
+                runBtn.disabled = false;
+                runBtn.innerText = 'Stop';
             }
         }
 
@@ -620,15 +653,17 @@
                         data.events.forEach(addEventToTimeline);
                     }
 
-                    // Disable inputs if task is running
+                    // Adjust controls depending on running status
                     if (data.status === 'running') {
-                        runBtn.disabled = true;
+                        runBtn.disabled = false;
                         taskInput.disabled = true;
-                        runBtn.innerText = 'Running...';
+                        runBtn.innerText = 'Stop';
+                        runBtn.style.backgroundColor = 'var(--failed)';
                     } else {
                         runBtn.disabled = false;
                         taskInput.disabled = false;
                         runBtn.innerText = 'Run Task';
+                        runBtn.style.backgroundColor = '';
                     }
                 } else if (data.type === 'event') {
                     addEventToTimeline(data.event);
@@ -637,10 +672,11 @@
                     statusBadge.className = `status-badge status-${data.status}`;
                     if (data.status !== 'running') {
                         stopTimer();
-                        // Re-enable controls when task is done
+                        // Re-enable controls and restore default look
                         runBtn.disabled = false;
                         taskInput.disabled = false;
                         runBtn.innerText = 'Run Task';
+                        runBtn.style.backgroundColor = '';
                     }
                 }
             };

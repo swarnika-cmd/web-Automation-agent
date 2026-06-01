@@ -413,6 +413,14 @@ def run_agent_loop(user_message: str, chat_history: list, backend: GroqBackend, 
     })
 
     for step in range(1, MAX_STEPS + 1):
+        # Check if task was stopped by user in the dashboard
+        import dashboard
+        if getattr(dashboard, "should_stop_task", False):
+            event_log.finish("failed")
+            dashboard.broadcast_event({"type": "status", "status": "failed"})
+            console.print("\n[bold red]🛑 Task execution cancelled by user.[/bold red]")
+            break
+
         # ─── Step header ──────────────────────────────────
         console.print()
         console.print(Rule(f"[bold cyan]Step {step}/{MAX_STEPS}[/bold cyan]", style="dim"))
